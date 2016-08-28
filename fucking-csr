@@ -1,0 +1,20 @@
+#!/bin/sh
+
+set -eu
+
+key="$1"
+CN="$2"
+shift 2
+
+SAN="DNS:$CN"
+while [ $# -gt 0 ]; do
+	SAN+=", DNS:$1"
+	shift
+done
+
+openssl req -new -sha256 -key "$key" -subj "/CN=$CN/" -reqexts SAN -config /dev/stdin <<EOF
+$(cat "$(openssl version -d | cut -d\" -f2)/openssl.cnf")
+
+[SAN]
+subjectAltName=$SAN
+EOF
