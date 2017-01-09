@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# Usage:
+# fucking-csr-smime key.pem "/C=DE/ST=Bayern/L=Erlangen/O=Friedrich-Alexander-Universitaet Erlangen-Nuernberg/CN=Julian Brost" foo@discard.fau.de bar@discard.fau.de
+
+set -eu
+
+key="$1"
+CN="$2"
+shift 2
+
+SAN=""
+while [ $# -gt 0 ]; do
+	if [ -n "$SAN" ]; then
+		SAN+=', '
+	fi
+	SAN+="email:$1"
+	shift
+done
+
+openssl req -new -sha256 -key "$key" -subj "$CN" -reqexts SAN -config /dev/stdin <<EOF
+$(cat "$(openssl version -d | cut -d\" -f2)/openssl.cnf")
+
+[SAN]
+subjectAltName=$SAN
+EOF
