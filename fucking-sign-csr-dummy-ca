@@ -1,0 +1,49 @@
+#!/bin/sh
+
+set -eu
+
+csr=$1
+days=${2:-7305}
+
+tmp=$(mktemp -d)
+
+sans=$(openssl req -in "$csr" -text -noout \
+	| grep -A 1 -e '[[:space:]]*X509v3 Subject Alternative Name:' \
+	| tail +2 \
+	| tr -d '[[:space:]]')
+subject=/$(openssl req -in "$csr" -text -noout \
+	| grep -x -e '[[:space:]]*Subject: .*' \
+	| sed 's/^[[:space:]]*Subject: //;s/ = /=/g;s:, :/:g;s/CN=[^/]*/\0 (CA)/')/
+
+openssl req -x509 \
+	-newkey rsa:4096 \
+	-nodes -keyout "$tmp/ca-key.pem" \
+	-out "$tmp/ca-cert.pem" \
+	-days "$days" \
+	-subj "$subject" \
+	-addext "nameConstraints=critical,permitted;$sans"
+
+openssl x509 -req \
+	-in "$csr" \
+	-CA "$tmp/ca-cert.pem" \
+	-CAkey "$tmp/ca-key.pem" \
+	-CAcreateserial \
+	-out "$tmp/cert.pem" \
+	-days "$days" \
+	-sha256 \
+	-extfile /dev/stdin \
+	-extensions v3_req <<EOF
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = $sans
+EOF
+
+echo '# Server Certificate'
+cat "$tmp/cert.pem"
+echo
+echo '# CA Certificate'
+cat "$tmp/ca-cert.pem"
+
+rm -rf "$tmp"
